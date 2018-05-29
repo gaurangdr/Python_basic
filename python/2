@@ -1,0 +1,17 @@
+class animal:
+	color = []
+	def __init__(self, name) :
+		self.name= name
+	def add_color(self,col):
+		self.color.append(col)
+
+cow = animal("cow")
+print cow.name
+bf = animal("buffelow")
+print bf.name
+
+cow.add_color("white:")
+print cow.color
+
+bf.add_color("black")
+print bf.color

@@ -1,0 +1,22 @@
+class MyClass:
+	i = 123
+	def greeting(self):
+		print "Hello"
+	def g2():
+		print "G2"
+	g2()
+
+x= MyClass()
+#fun = x.greeting
+#MyClass.greeting(x)
+print type(MyClass)
+print type(x)
+print type(x.i)
+print type(x.greeting)
+print type(x.greeting())
+#print type(fun)
+
+x.count=10;
+while x.count < 20:
+	print x.count
+	x.count =+ 1

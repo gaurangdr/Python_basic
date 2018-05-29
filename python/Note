@@ -1,0 +1,9 @@
+In python, immutable object is an object which has fix mem location and value assign to it, we can't chage it
+example int, string, set
+
+mutable object, have memory laction and assign different value to that memory location
+
+Mutable objects:
+list, dict, set, byte array
+Immutable objects:
+int, float, complex, string, tuple, frozen set [note: immutable version of set], bytes
