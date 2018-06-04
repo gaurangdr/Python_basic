@@ -57,8 +57,10 @@ def extract_names(filename1):
   for line in filename :
 	m = re.search("<tr align=\"right\"><td>([0-9]+)</td><td>(.[a-z]+)</td><td>(.[a-z]+)",line)
 	if m :
-		dict_name[m.group(2)] = m.group(1)
-		dict_name[m.group(3)] = m.group(1)
+		if m.group(2) not in dict_name.keys() :
+			dict_name[m.group(2)] = m.group(1)
+		if m.group(3) not in dict_name.keys() :
+			dict_name[m.group(3)] = m.group(1)
   filename.close()
   list_name= dict_name.items()
   list_tuple = sorted(list_name)

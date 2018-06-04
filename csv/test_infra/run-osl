@@ -1,0 +1,168 @@
+#!/bin/env bash
+
+zynq_modules=(zc702 zc702-ecc zc706 zc706-ecc zc770-dc1 zc770-dc2-x16 zc770-dc2-x8 zc770-dc3 zc770-dc4 zed)
+source common/utils.sh
+
+if [ "$SITE" == "XCO" ]; then
+	echo "Boardfarm does not support SITE: XCO"
+	echo "Please use SITE: XHD or SITE: XSJ"
+	exit 1
+fi
+
+############## RDI INSTALLATION ###################
+echo "Installing RDI..."
+export ENVROOT=/proj/rdi/env/stable/hierdesign
+. $ENVROOT/g_profile
+PID=$$
+echo "PID is $PID"
+
+############## variable initialization ##############
+echo "setting variables..."
+export DEMO_HOME="$RDI_REPOSITORY"
+export RDI_DATA="${DEMO_HOME}/rdi_data/osl/run_${OSL_MODULE}"
+export OUTPUT_DIR=/proj/xresults/siv/$USER/$RUN_ID/run_${OSL_MODULE}
+
+################## Board Release ############################
+function release_board(){
+        echo "release_board func called..."
+
+        if [ "$SITE" == "XHD" ]; then
+                ps -ef | grep `whoami` | grep "/group/xhdboardfarm" | grep -v "grep" | awk '{ if ($3 =='"$PID"') print $2}' | xargs kill -9
+        elif [ "$SITE" == "XSJ" ]; then
+                ps -ef | grep `whoami` | grep "/group/xsjboardfarm" | grep -v "grep" | awk '{ if ($3 =='"$PID"') print $2}' | xargs kill -9
+        fi
+}
+
+################## Board Acquisition ############################
+function acquire_board(){
+	export PATH=/usr/bin:$PATH
+	
+	board_var=$1
+        rm -rf 'osl/board_bootup_'*.log
+        logfile=osl/board_bootup_${RUN_ID}.log
+        echo "OUTPUT FILE for acquiring board : ${DEMO_HOME}/$logfile"
+
+	if [ ! -z "$board_var" ]; then
+		$SYSTEST ${board_var} "$DEMO_HOME/common/board_setup.systest $BOARD" > $logfile &
+	else
+        	$SYSTEST ${board} "$DEMO_HOME/common/board_setup.systest $BOARD" > $logfile &
+	fi
+
+        sleep 10
+
+        echo "########## Waiting to acquire board... ##########"
+        board_acquire_pattern="Systest server on host "
+        board_acquired=$(grep "$board_acquire_pattern" $logfile -c)
+        while [ "$board_acquired" -lt 1 ]
+        do
+                sleep 3
+                board_acquired=$(grep "$board_acquire_pattern" $logfile -c)
+        done
+        sleep 75
+        echo "########## Acquired board ##########"
+
+        export TARGET_HOST_NAME=$( grep -E "$board_acquire_pattern" $logfile | sed -ne 's/\(.*\) host \(.*\) started.*/\2/p' | awk -F"." '{print $1}' )
+
+        target_host_name_prefix="$(echo $TARGET_HOST_NAME | cut -c1-3)"
+
+        if [ "$SITE" == "XHD" ]; then
+                if [ -z "$TARGET_HOST_NAME" ] || [ $target_host_name_prefix != "xhd"  ];then
+                        echo "Invalid Target Host $TARGET_HOST_NAME Exiting... $target_host_name_prefix"
+                        exit
+                fi
+
+        elif [ "$SITE" == "XSJ" ]; then
+#                if [ -z "$TARGET_HOST_NAME" ] || [ $target_host_name_prefix != "xsj"  ];then
+		if [ -z "$TARGET_HOST_NAME" ]; then
+                        echo "Invalid Target Host $TARGET_HOST_NAME Exiting..."
+                        exit
+                fi
+        fi
+        echo "Host is $TARGET_HOST_NAME"
+}
+
+function check_zynq_module() {
+
+	for val in "${zynq_modules[@]}"; do
+		if [[ "$OSL_MODULE" == "$val" ]]; then
+			echo 1
+			return
+		fi
+	done
+	echo 0
+}
+
+if [ "$OSL_MODULE" == 'dc1' ]; then
+	if [ "$VARIANCE" == 'hardware' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/$VARIANCE/dc1/boot_linux.tql,$TQL_FILES_PATH/$VARIANCE/dc1/freertos.tql,$TQL_FILES_PATH/$VARIANCE/dc1/linux.tql,$TQL_FILES_PATH/$VARIANCE/dc1/uboot.tql,$TQL_FILES_PATH/$VARIANCE/dc1/zc1751.tql
+	fi
+elif [ "$OSL_MODULE" == 'dc2' ]; then
+	if [ "$VARIANCE" == 'hardware' ]; then	
+		export TQL_FILES=$TQL_FILES_PATH/$VARIANCE/dc2/boot_linux.tql,$TQL_FILES_PATH/$VARIANCE/dc2/freertos.tql,$TQL_FILES_PATH/$VARIANCE/dc2/linux.tql,$TQL_FILES_PATH/$VARIANCE/dc2/uboot.tql,$TQL_FILES_PATH/$VARIANCE/dc2/zc1751.tql
+	fi
+elif [ "$OSL_MODULE" == 'dc5' ]; then
+        if [ "$VARIANCE" == 'hardware' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/$VARIANCE/dc5/boot_linux.tql
+	fi
+elif [ "$OSL_MODULE" == 'zcu100' ]; then
+        if [ "$VARIANCE" == 'hardware' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/$VARIANCE/zcu100/boot_linux.tql,$TQL_FILES_PATH/$VARIANCE/zcu100/freertos.tql,$TQL_FILES_PATH/$VARIANCE/zcu100/linux.tql,$TQL_FILES_PATH/$VARIANCE/zcu100/uboot.tql,$TQL_FILES_PATH/$VARIANCE/zcu100/zcu100.tql
+	fi
+elif [ "$OSL_MODULE" == 'zcu102' ]; then
+        if [ "$VARIANCE" == 'hardware' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/$VARIANCE/zcu102/boot_linux.tql,$TQL_FILES_PATH/$VARIANCE/zcu102/freertos.tql,$TQL_FILES_PATH/$VARIANCE/zcu102/linux.tql,$TQL_FILES_PATH/$VARIANCE/zcu102/uboot.tql,$TQL_FILES_PATH/$VARIANCE/zcu102/zcu102.tql
+	elif [ "$VARIANCE" == 'qemu' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/qemu/zcu102/boot_linux.tql,$TQL_FILES_PATH/qemu/zcu102/freertos.tql,$TQL_FILES_PATH/qemu/zcu102/kernel.tql,$TQL_FILES_PATH/qemu/zcu102/openamp.tql,$TQL_FILES_PATH/qemu/zcu102/pmu_fw.tql,$TQL_FILES_PATH/qemu/zcu102/uboot.tql
+	fi
+elif [ "$OSL_MODULE" == 'kintex7' ]; then
+        if [ "$VARIANCE" == 'hardware' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/$VARIANCE/microblaze/build.tql,$TQL_FILES_PATH/$VARIANCE/microblaze/execution.tql
+	fi
+elif [ "$OSL_MODULE" == 'zc702' ]; then
+	export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/perf_linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/rsa.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/uboot_rsa.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/flash_utility.tql
+elif [ "$OSL_MODULE" == 'zc702-ecc' ]; then
+	export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql
+elif [ "$OSL_MODULE" == 'zc706' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/perf_linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/uboot.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/flash_utility.tql
+elif [ "$OSL_MODULE" == 'zc706-ecc' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/fsbl.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/uboot.tql
+elif [ "$OSL_MODULE" == 'zc706-stack' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/flash_utility.tql
+elif [ "$OSL_MODULE" == 'zc770-dc1' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/perf_linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/uboot.tql
+elif [ "$OSL_MODULE" == 'zc770-dc2-x16' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/perf_linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/uboot.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/flash_utility.tql
+elif [ "$OSL_MODULE" == 'zc770-dc2-x8' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/uboot.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/flash_utility.tql
+elif [ "$OSL_MODULE" == 'zc770-dc3' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/perf_linux.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/system.tql,$TQL_FILES_PATH/zynq/$OSL_MODULE/flash_utility.tql
+elif [ "$OSL_MODULE" == 'zc770-dc4' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql
+elif [ "$OSL_MODULE" == 'zed' ]; then
+		export TQL_FILES=$TQL_FILES_PATH/zynq/$OSL_MODULE/linux.tql
+fi
+
+########### Launching RDI regression...###########
+cd $DEMO_HOME
+echo "RDI root directory is" `pwd`
+
+source common/osl/board_list.sh "$OSL_MODULE"
+
+found=$(check_zynq_module)
+
+if [ "$found" == 1 ]; then
+	for board_var in "${board[@]}"; do
+		acquire_board $board_var
+		run_zynq_rdi_regression "RDI_DEMO_DIR" "$ZYNQ_TARGET_TESTS" "$ZYNQ_TARGET_TESTS/target_tests" "$RUN_ID" "$SUPER_SUITE" "$TEST_SUITE" "$REG_TYPE" "$REG_SUBTYPE" "$TEST_NAME" "$board_var"
+		release_board
+	done
+elif [ "$VARIANCE" == 'qemu' ]; then
+	run_rdi_regression "OSL_DIR" "$OSL_DIR" "$OSL_DIR/zynqMP/qemu/scripts/${SUPER_SUITE}" "$RUN_ID" "$OSL_MODULE" "$SUPER_SUITE" "$TEST_SUITE" "$REG_TYPE" "$REG_SUBTYPE" "$TEST_NAME"
+else
+	echo -e \\n"::::::: Start Board Set UP ::::"\\n
+	acquire_board
+	run_rdi_regression "OSL_DIR" "$OSL_DIR" "$OSL_DIR/zynqMP/hardware/scripts/execute/${SUPER_SUITE}" "$RUN_ID" "$OSL_MODULE" "$SUPER_SUITE" "$TEST_SUITE" "$REG_TYPE" "$REG_SUBTYPE" "$TEST_NAME"
+	release_board
+fi
+
+chmod 777 -R /proj/xresults/siv/$USER/$RUN_ID &

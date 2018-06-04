@@ -1,0 +1,33 @@
+Python common utils exercise:
+
+A log file kernel_boot_log.txt placed at a remote location. Parse the log file and generate junit xml report. From junit xml report generate a csv report file. 
+
+*** Get log from remote location ***
+Use 'sshpass' utility to get the log file  "toral@192.168.0.84:/home/toral/toral.mevada/projects/python_training/utils/exercises/data/kernel_boot_log.txt". Password is "toral123". It is also placed in training folder for your quick access. 
+
+
+*** log parsing to generate xml ***
+Expected xml for the kernel_boot_log.txt is placed in training folder
+
+The log file contains summary block which starts with line "Diagnostics Test Summary" and finishes at line "Press Enter to continue".You need to use the summary bolck to extract the run test case details. 
+
+Consider only those test case which has run count > 0. Test case run status PASS/FAIL can be decided from "Last test executed status" field. Look into the TestResults.xml to understand what different fields would be needed in an output xml. Once xml is created, generate csv file which contains test case names and results. Expected csv file is placed in training folder
+
+
+Steps:
+1. Create a config file to provide remote machine credentials and path for kernel_boot_log.txt
+- Use configparser 
+2. Create a script which takes config file and an input
+- Use argsparser 
+3. Get log file from remote machine. 
+- Use subprocess
+4. Parse the log file and create xml report
+- Use elementtree
+5. Parse xml file and generate csv file. 
+- use csv 
+6. To make it more complex, you can pass a list of test cases from argsparser, then your script should generate test reports(xml, csv) for only those test cases.
+
+
+
+
+

@@ -1,0 +1,131 @@
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'drivers',
+		module = 'zcu102',
+		board = 'zcu102',
+		test_name = 'build_standalone_drivers',
+		priority = '1',
+		name = 'zcu102_build_standalone_drivers',
+	}
+AS standalone_zcu102_build_drivers;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'drivers',
+                module = 'dc1',
+		board = 'dc1',
+		test_name = 'build_standalone_drivers',
+		priority = '1',
+		name = 'dc1_build_standalone_drivers',
+	}
+AS standalone_dc1_build_drivers;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'drivers',
+                module = 'dc2',
+		board = 'dc2',
+		test_name = 'build_standalone_drivers',
+		priority = '1',
+		name = 'dc2_build_standalone_drivers',
+	}
+AS standalone_dc2_build_drivers;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'drivers',
+                module = 'zcu100',
+		board = 'zcu100',
+		test_name = 'build_standalone_drivers',
+		priority = '1',
+		name = 'zcu100_build_standalone_drivers',
+	}
+AS standalone_zcu100_build_drivers;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'drivers',
+                module = 'zc1254',
+		board = 'zc1254',
+		test_name = 'build_standalone_drivers',
+		priority = '1',
+		name = 'zc1254_build_standalone_drivers',
+	}
+AS standalone_zc1254_build_drivers;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'helloapps',
+		module = 'zcu102',
+		board = 'zcu102',
+		test_name = 'build_standalone_helloapps',
+		priority = '1',
+		name = 'zcu102_build_standalone_helloapps',
+	}
+AS standalone_zcu102_build_helloapps;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'helloapps',
+		module = 'dc1',
+		board = 'dc1',
+		test_name = 'build_standalone_helloapps',
+		priority = '1',
+		name = 'dc1_build_standalone_helloapps',
+	}
+AS standalone_dc1_build_helloapps;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'helloapps',
+		module = 'dc2',
+		board = 'dc2',
+		test_name = 'build_standalone_helloapps',
+		priority = '1',
+		name = 'dc2_build_standalone_helloapps',
+	}
+AS standalone_dc2_build_helloapps;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'helloapps',
+		module = 'zcu100',
+		board = 'zcu100',
+		test_name = 'build_standalone_helloapps',
+		priority = '1',
+		name = 'zcu100_build_standalone_helloapps',
+	}
+AS standalone_zcu100_build_helloapps;
+
+FROM $RDI_DEMO_DIR/tcRepo/standalone/tests/systest/build_standalone
+TEMPLATE
+	user {
+		tsuite = 'build',
+		ssuite = 'helloapps',
+                module = 'zc1254',
+		board = 'zc1254',
+		test_name = 'build_standalone_helloapps',
+		priority = '1',
+		name = 'zc1254_build_standalone_helloapps',
+	}
+AS standalone_zc1254_build_helloapps;
+
+

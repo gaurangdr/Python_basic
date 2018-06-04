@@ -1,0 +1,6 @@
+Test name,Result
+MAC Loopback Test,FAIL
+UART Register Read-Write test,FAIL
+PHY  Loopback Test,PASS
+SDRAM Bit Fade test,FAIL
+SDRAM Data Line Test,PASS

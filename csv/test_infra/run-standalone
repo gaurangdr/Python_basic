@@ -1,0 +1,159 @@
+#!/bin/env bash
+
+source common/utils.sh
+
+EXECUTION_TYPE=$1
+
+source common/env_var_global.sh standalone
+source standalone/settings.sh
+
+clean_rdi_data() {
+	echo -e \\n"::::::: Clean RDI data... :::::::"\\n
+	rm -rf $RDI_DATA
+}
+
+#*******************************************INPUT ARGUMENT CHECK**************************************
+function usage {
+    echo "*******************************************************************************************"
+    echo "Following parameter values to be provided:"
+    echo "   paramer1=execution_type (build/run)"
+    echo "*******************************************************************************************"
+    exit 1
+}
+if [ $# -lt 1 ] ; then
+    echo "Invalid no of input arguments, please check the inputs again"
+        usage
+        exit
+fi
+
+#*********************************************************************************************************
+echo "--------------------------------------------------------------------------------------------------"
+echo " Regression is started for" $MODULE "and executing" $VARIANCE "testcases at": `date`
+echo "--------------------------------------------------------------------------------------------------"
+##############################################
+
+
+#############################################################
+
+`umask 022`
+
+function release_board() {
+	echo "release_board func called..."
+	PID=$1
+
+	if [ "$SITE" == "XHD" ]; then
+		ps -ef | grep `whoami` | grep "/group/xhdboardfarm" | grep -v "grep" | awk '{ if ($3 =='"$PID"') print $2}' | xargs kill -9
+	elif [ "$SITE" == "XSJ" ]; then
+		ps -ef | grep `whoami` | grep "/group/xsjboardfarm" | grep -v "grep" | awk '{ if ($3 =='"$PID"') print $2}' | xargs kill -9
+	fi
+}
+
+function acquire_board(){
+
+        rm -rf 'standalone/board_bootup_'*.log
+        echo "##board is $board"
+	logfile=standalone/board_bootup_${RUN_ID}.log
+        $SYSTEST $board "common/board_setup.systest"  > $logfile &
+        sleep 10
+
+	echo "########## Waiting to acquire board... ##########"
+	board_acquire_pattern="Systest server on host "
+	board_acquired=$(grep "$board_acquire_pattern" $logfile -c)
+	
+	while [ "$board_acquired" -lt 1 ]
+	do
+		sleep 3
+		board_acquired=$(grep "$board_acquire_pattern" $logfile -c)
+	done	
+	sleep 60
+	echo "##########       Acquired board        ##########"
+        export TARGET_HOST_NAME=$(grep -E "$board_acquire_pattern" $logfile | sed -ne 's/\(.*\) host \(.*\) started.*/\2/p' | awk -F"." '{print $1}')
+
+        target_host_name_prefix="$(echo $TARGET_HOST_NAME | cut -c1-3)"
+
+if [ "$SITE" == "XHD" ]; then
+        if [ -z "$TARGET_HOST_NAME" ] || [ $target_host_name_prefix != "xhd"  ];then
+                echo "Invalid Target Host $TARGET_HOST_NAME Exiting... $target_host_name_prefix"
+                exit
+        fi
+
+elif [ "$SITE" == "XSJ" ]; then
+#        if [ -z "$TARGET_HOST_NAME" ] || [ $target_host_name_prefix != "xsj"  ];then
+        if [ -z "$TARGET_HOST_NAME" ]; then
+                echo "Invalid Target Host $TARGET_HOST_NAME Exiting..."
+                exit
+        fi
+fi
+        echo "Host is $TARGET_HOST_NAME"
+}
+
+function run_rdi(){
+        MODULE=$1
+
+	if [ $EXECUTION_TYPE == "run" ]; then
+        	acquire_board
+	fi
+######################### RDI INSTALLATION ####################################
+        echo -e \\n"::::::: Installing RDI... :::::::"\\n
+        export ENVROOT=/proj/rdi/env/stable/hierdesign
+            . $ENVROOT/g_profile
+        status=$?
+        if [ $status != 0 ]; then
+                echo "Error RDI Installation: $status - Unsuccessful"
+        else
+                echo "RDI Installation: $status - Successful"
+        fi
+        cd $DEMO_HOME
+        echo "RDI root directory is" `pwd`
+        export PATH=/usr/bin/:$PATH
+        source /home/xbrbbot/unpaths.env
+        PID=$$
+        echo "PID is $PID"
+
+##################### Launching RDI regression ############################
+        echo -e \\n"::::::: Launching RDI regression for $MODULE :::::::"\\n
+
+	if [ $EXECUTION_TYPE == "build" ]; then
+		export RDI_DATA=$DEMO_HOME/rdi_data/standalone/build_${MODULE}_${SILICON_VER}
+		export TQL_FILES=$TQL_FILES_PATH/build/build.tql
+		OUTPUT_DIR=$OUTPUT_DIR/build_${MODULE}
+
+		if [ ! -z "$SUPER_SUITE" ]; then
+			query_ssuite="and user.ssuite == '${SUPER_SUITE}'"
+		else
+			query_ssuite=""
+		fi
+
+		rdi regression --profile profiles/common.prf --root-path "RDI_DEMO_DIR=$DEMO_HOME" --tql "APPLY *FROM $DEMO_HOME/tcRepo/standalone/tests/systest WHERE user.board == '$MODULE' $query_ssuite AS $RUN_ID ;" --run-local
+	else
+		export RDI_DATA=$DEMO_HOME/rdi_data/standalone/run_${MODULE}_${SILICON_VER}
+		if [ -f $TQL_FILES_PATH/zynqmp/$VARIANCE/${MODULE}/${MODULE}.tql ]; then
+			export TQL_FILES=$TQL_FILES_PATH/zynqmp/$VARIANCE/${MODULE}/${MODULE}.tql
+		fi
+		if [ -f $TQL_FILES_PATH/zynqmp/$VARIANCE/${MODULE}/${MODULE}_others.tql ]; then
+			if [ ! -z $TQL_FILES ]; then
+				TQL_FILES=${TQL_FILES},
+			fi
+				export TQL_FILES=${TQL_FILES}${TQL_FILES_PATH}/zynqmp/$VARIANCE/${MODULE}/${MODULE}_others.tql
+		fi
+		OUTPUT_DIR=$OUTPUT_DIR/run_${MODULE}
+		
+		run_rdi_regression "RDI_DEMO_DIR" "$DEMO_HOME" "$DEMO_HOME/tcRepo/standalone/tests/systest" "$RUN_ID" "$MODULE" "$SUPER_SUITE" "$TEST_SUITE" "$REG_TYPE" "$REG_SUBTYPE" "$TEST_NAME"
+		
+	fi
+
+	chmod -R 777 $RESULTS_PATH/${USER}/${RUN_ID} &
+
+	if [ $EXECUTION_TYPE == "run" ]; then
+		release_board $PID
+	fi
+
+}
+
+run_rdi $MODULE
+
+echo "--------------------------------------------------------------------------------------------------"
+echo " Regression is completed for" $MODULE "and " $VARIANCE "testcases at": `date`
+echo "--------------------------------------------------------------------------------------------------"
+clean_rdi_data
+

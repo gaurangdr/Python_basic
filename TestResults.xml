@@ -1,0 +1,74 @@
+<testsuites>
+  <testsuite errors="3" name="TEST_RESULTS" tests="2">
+    <testcase name="SDRAM Data Line Test&#10;">
+      <system-out>	Total run count --------------&gt; 5
+
+	Total pass count -------------&gt; 5
+
+	Total failure count ----------&gt; 0
+
+	Consecutive failure count ----&gt; 0
+
+	Last test executed status ----&gt; PASS
+
+	Last test error code ---------&gt; n/a
+</system-out>
+    </testcase>
+    <testcase name="SDRAM Bit Fade test&#10;">
+      <error>	Total run count --------------&gt; 2
+
+	Total pass count -------------&gt; 1
+
+	Total failure count ----------&gt; 1
+
+	Consecutive failure count ----&gt; 1
+
+	Last test executed status ----&gt; FAIL
+
+	Last test error code ---------&gt; 0x5000
+</error>
+    </testcase>
+    <testcase name="MAC Loopback Test&#10;">
+      <error>	Total run count --------------&gt; 1
+
+	Total pass count -------------&gt; 1
+
+	Total failure count ----------&gt; 0
+
+	Consecutive failure count ----&gt; 0
+
+	Last test executed status ----&gt; FAIL
+
+	Last test error code ---------&gt; 0x2000000
+</error>
+    </testcase>
+    <testcase name="PHY  Loopback Test&#10;">
+      <system-out>	Total run count --------------&gt; 1
+
+	Total pass count -------------&gt; 1
+
+	Total failure count ----------&gt; 0
+
+	Consecutive failure count ----&gt; 0
+
+	Last test executed status ----&gt; PASS
+
+	Last test error code ---------&gt; 0x2000000
+</system-out>
+    </testcase>
+    <testcase name="UART Register Read-Write test&#10;">
+      <error>	Total run count --------------&gt; 10
+
+	Total pass count -------------&gt; 9
+
+	Total failure count ----------&gt; 1
+
+	Consecutive failure count ----&gt; 1
+
+	Last test executed status ----&gt; FAIL
+
+	Last test error code ---------&gt; 0x20000
+</error>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,239 @@
+#!/bin/env bash
+
+echo "--------------------------------------------------------------------------------------------------"
+echo " Regression is started for" $BOARD "and executing" $VARIANCE "testcases at": `date`
+echo "--------------------------------------------------------------------------------------------------"
+##############################################
+echo "board is $BOARD"
+echo "project is $PROJECT"
+echo "bsp is $BSP"
+echo "variance is $VARIANCE"
+echo "platform is $PLATFORM_TYPE"
+echo "version is $SILICON_VER"
+echo "module is $MODULE"
+echo "flavour is $FLAVOUR"
+echo "component is $COMPONENT"
+echo "test_name is $TEST_CASE_NAME"
+PID=$$
+echo "PID is $PID"
+
+################################################
+
+export TQL_FILES=''
+if [ "$MODULE" = "na" ] ; then
+        TQL_FILES_PATH=$DEMO_HOME/tql/petalinux/${BOARD}
+	TQL_FILES=$TQL_FILES_PATH/plnx_${BOARD}.tql
+else
+        TQL_FILES_PATH=$DEMO_HOME/tql/petalinux/${MODULE}
+	TQL_FILES=$TQL_FILES_PATH/plnx_${MODULE}.tql
+fi
+if [ "$MODULE" = "dc1" ] || [ "$MODULE" = "dc2" ]
+then
+	export RDI_DATA=$DEMO_HOME/rdi_data/petalinux/${VARIANCE}/rdi_data_${MODULE}_${COMPONENT}
+elif [ "$SILICON_VER" != "na" ]
+then
+	export RDI_DATA=$DEMO_HOME/rdi_data/petalinux/${VARIANCE}/rdi_data_${BOARD}_${SILICON_VER}_${COMPONENT}
+else
+	export RDI_DATA=$DEMO_HOME/rdi_data/petalinux/${VARIANCE}/rdi_data_${BOARD}_${COMPONENT}
+fi
+
+echo "!!!!!!!!!!!RUN_ID - $RUN_ID!!!!!!!!!!!!!!"
+###########################################################################
+`umask 022`
+
+################## Board Bootup ############################
+function board_bootup() {
+	if [[ "$PLNX_COMPONENT" == "prebuild" && "$VARIANCE" == "systest" && "$SUPER_SUITE" == "kernel" ]]; then
+		echo "Starting Petalinux bootup. This will take few minutes..."
+		MNT_DIR=$PROJ_DIR/$PROJECT
+		CMD="$COMMON_SCRIPT/bootup/kernel_bootup.systest $MNT_DIR $PLNX_TOOL_PATH"
+
+		ssh $TARGET_HOST_NAME 'bash -s' <  "$DEMO_HOME/common/systest_client.cmd" $CMD > petalinux/bootup_kernel_${RUN_ID}.log
+	fi
+}
+
+################## Board Release ############################
+function release_board(){
+        echo "release_board func called..."
+
+        if [ "$SITE" == "XHD" ]; then
+                ps -ef | grep `whoami` | grep "/group/xhdboardfarm" | grep -v "grep" | awk '{ if ($3 =='"$PID"') print $2}' | xargs kill -9
+        elif [ "$SITE" == "XSJ" ]; then
+                ps -ef | grep `whoami` | grep "/group/xsjboardfarm" | grep -v "grep" | awk '{ if ($3 =='"$PID"') print $2}' | xargs kill -9
+        fi
+}
+################## Board Acquisition ############################
+function acquire_board(){
+	rm -rf 'petalinux/board_bootup_'*.log
+        logfile=petalinux/board_bootup_${RUN_ID}.log
+	echo "OUTPUT FILE for acquiring board : ${DEMO_HOME}/$logfile"
+
+	if [ ! "$MODULE" = "na" ]
+	then
+		$SYSTEST ${!MODULE} "$DEMO_HOME/common/board_setup.systest $BOARD" > $logfile &
+	elif [ ! "$SILICON_VER" = "na" ]
+	then
+		$SYSTEST ${!VERSION_TYPE} "$DEMO_HOME/common/board_setup.systest $BOARD" > $logfile &
+	else
+		$SYSTEST ${!BOARD} "$DEMO_HOME/common/board_setup.systest $BOARD" > $logfile &
+	fi
+	sleep 10
+
+	echo "########## Waiting to acquire board... ##########"
+        board_acquire_pattern="Systest server on host "
+        board_acquired=$(grep "$board_acquire_pattern" $logfile -c)
+	while [ "$board_acquired" -lt 1 ]
+        do
+                sleep 3
+                board_acquired=$(grep "$board_acquire_pattern" $logfile -c)
+        done
+        sleep 75
+        echo "########## Acquired board ##########"
+
+	export TARGET_HOST_NAME=$( grep -E "$board_acquire_pattern" $logfile | sed -ne 's/\(.*\) host \(.*\) started.*/\2/p' | awk -F"." '{print $1}' )
+
+	target_host_name_prefix="$(echo $TARGET_HOST_NAME | cut -c1-3)"
+	if [ "$SITE" == "XHD" ]; then
+		if [ -z "$TARGET_HOST_NAME" ] || [ $target_host_name_prefix != "xhd"  ];then
+			echo "Invalid Target Host $TARGET_HOST_NAME Exiting... $target_host_name_prefix"
+			exit
+		fi
+
+	elif [ "$SITE" == "XSJ" ]; then
+#		if [ -z "$TARGET_HOST_NAME" ] || [ $target_host_name_prefix != "xsj"  ];then
+		if [ -z "$TARGET_HOST_NAME" ]; then
+			echo "Invalid Target Host $TARGET_HOST_NAME Exiting..."
+			exit
+		fi
+	fi
+	echo "Host is $TARGET_HOST_NAME"
+}   
+###########################RDI Regression Executions#######################
+function run_rdi(){
+	if [ "$VARIANCE" == "systest" ]
+	then
+		echo -e \\n"::::::: Start Board Set UP ::::"\\n
+		acquire_board
+		board_bootup
+	fi
+#################RDI INSTALLATION####################################
+	echo -e \\n"::::::: Installing RDI... :::::::"\\n
+	export ENVROOT=/proj/rdi/env/stable/hierdesign
+	. $ENVROOT/g_profile
+	status=$?
+	if [ $status != 0 ]; then
+		echo "Error RDI Installation: $status - Unsuccessful"
+	else
+		echo "RDI Installation: $status - Successful"
+	fi
+#####################################################################
+    
+	cd $DEMO_HOME
+	echo "RDI root directory is" `pwd`
+	export PATH=/usr/bin/:$PATH
+	source /home/xbrbbot/unpaths.env
+
+###################Launching RDI regression############################
+	echo -e \\n"::::::: Launching RDI regression for $BOARD :::::::"\\n
+	if [ "$PLATFORM_TYPE" = "mb" ]  &&  [ "$FLAVOUR" = "full" ]
+	then
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${BOARD}_${FLAVOUR}    
+	elif [ "$PLATFORM_TYPE" = "mb" ]  &&  [ "$FLAVOUR" = "lite" ]
+	then
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${BOARD}_${FLAVOUR}
+    
+	elif [ "$MODULE" = "dc1" ]  || [ "$MODULE" = "dc2" ]
+	then
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${MODULE}
+
+	elif [ "$BOARD" = "zc702" ]  || [ "$BOARD" = "zc706" ] || [ "$BOARD" = "zed" ]
+	then
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${BOARD}	
+    
+	elif [ "$SILICON_VER" != "na" ]
+	then
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${BOARD}_${SILICON_VER}   
+	elif [ "$BOARD" = "zcu106" ]
+	then
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${BOARD}
+	else
+		OUTPUT_DIR=$RESULTS_PATH/${VARIANCE}/${BOARD}
+	fi
+	OUTPUT_DIR=$OUTPUT_DIR/${USER}/${RUN_ID}
+
+	tql_query="user.variance == '$VARIANCE' and user.component == '$COMPONENT'"
+
+	if [ ! -z "$SUPER_SUITE" ]; then
+		tql_query=$tql_query" and user.ssuite == '${SUPER_SUITE}'"
+	fi
+
+	if [ ! -z "$TEST_SUITE" ]; then
+		tql_query=$tql_query" and user.tsuite == '${TEST_SUITE}'"
+	fi
+    	
+	if [ ! -z "$TEST_CASE_NAME" ]; then
+		tql_query=$tql_query" and user.test_name == '${TEST_CASE_NAME}'"
+	fi
+
+	if [ ! -z "$REG_TYPE" ]; then
+		tql_query=$tql_query" and user.reg_type =~ /.*\\b${REG_TYPE}\\b.*/"
+	fi
+
+	if [ ! -z "$REG_SUBTYPE" ]; then
+		tql_query=$tql_query" and user.reg_subtype =~ /.*\\b${REG_SUBTYPE}\\b.*/"
+	fi
+
+	rdi regression --profile profiles/common.prf --root-path "PLNX_DIR=$PLNX_DIR" --tql "APPLY *FROM $PLNX_DIR/tests WHERE ${tql_query} AS $RUN_ID ;" --run-local
+
+	chmod -R 777 $OUTPUT_DIR
+	if [ "$VARIANCE" == "systest" ]
+	then
+		release_board
+	fi
+}
+
+#####################Create & Building petalinux project####################
+
+if [ "$VARIANCE" = "qemu" ]; then
+	echo "Creating test-spiflash.bin files"
+	if [ ! -d "$QEMU_PROJ_DIR/$PROJECT" ]
+	then
+		echo "Project is not created previously... Creating new project for qemu cases"
+		$DEMO_HOME/common/petalinux/create_proj.sh $QEMU_PROJ_DIR
+	fi
+	if [ "$PLATFORM_TYPE" = "zynq" ]
+	then
+		dd if=/dev/urandom of=test-spiflash0.bin bs=4k count=8192
+		dd if=/dev/urandom of=test-spiflash1.bin bs=4k count=8192
+	elif [ "$PLATFORM_TYPE" = "mb" ]
+	then
+		dd if=/dev/urandom of=test-spiflash0.bin bs=4k count=32768
+	else
+		dd if=/dev/zero of=test-spiflash0.bin bs=1M count=64
+	fi
+	
+	
+else
+	if  [ "$COMPONENT" = "prebuild" ]; 
+	then
+		if [ ! -d "$PROJ_DIR/$PROJECT" ]
+		then
+			echo "Project is not created previously... Creating new project for prebuild cases"
+			$DEMO_HOME/common/petalinux/create_proj.sh $PROJ_DIR
+		fi
+	fi
+	
+fi
+
+echo -e \\n"::::::: Started executing $VARIANCE test case(s)... :::::::"\\n
+
+run_rdi $DEMO_HOME $BOARD $VARIANCE $FLAVOUR $COMPONENT $USER $RUN_ID
+
+echo "--------------------------------------------------------------------------------------------------"
+echo " Regression is completed for" $BOARD "and " $VARIANCE "testcases at": `date`
+echo "--------------------------------------------------------------------------------------------------"
+
+###############Clean RDI data############################################
+echo -e \\n"::::::: Clean RDI data... :::::::"\\n
+source $DEMO_HOME/common/petalinux/clean_project.sh
+##########################################################################

@@ -1,0 +1,459 @@
+#!/bin/bash
+
+#Valid petalinux command line arguments
+petalinux_args="config:,plnx_ver:,plnx_bsp_path:,plnx_tool_path:,variance:,bsp:,project:,silicon_ver:,board_rev:,plnx_component:,super_suite:,test_suite:,test_case_name:,regression_type:,temp_folder:,host_machine:,proj_dir:,results_path:,run_id:,git_branch_kernel:,git_branch_atf:,git_branch_uboot:,pathces_folder_kernel:,pathces_folder_atf:,pathces_folder_uboot:,hdf_path:,vivado_path:,bootmode:,bit_stream_path:,source_path_kernel:,source_path_atf:,source_path_uboot:,external_path_kernel:,external_path_atf:,external_path_uboot:,tag_id_kernel:,tag_id_uboot:,tag_id_atf:,commit_id_kernel:,commit_id_atf:,commit_id_uboot:,board:,board_type:,module:,platform_type:,flavour:,generate_tql:,git_proxy_command:,generate_csv:,serial_port:"
+
+#Valid osl/standalone command line arguments
+osl_standalone_args="config:,run_id:,xtools_ver:,xtools_root:,vivado_xtool:,sdk_path:,xsct_tool:,aarch64_tc_path:,armv7a_tc_path:,armv7r_tc_path:,silicon_ver:,silicon_zcu100:,zcu100_rev:,zcu102_rev:,build_source:,esw_repo_local_path:,zcu102_build_var:,br_linux:,br_uboot:,br_atf:,br_xen:,br_embed:,br_dtx:,br_embed_zynqmp:,br_embed_intg:,ext_hdf_less_zcu102:,ext_hdf_full_zcu102:,ext_hdf_less_zcu100:,ext_hdf_full_zcu100:,ext_hdf_less_dc1:,ext_hdf_full_dc1:,ext_hdf_less_dc2:,ext_hdf_full_dc2:,ext_hdf_less_dc5:,ext_hdf_full_dc5:,variance:,patch_linux:,patch_uboot:,patch_atf:,patch_xen:,patch_dtx:,patch_embed:,patch_embed_zynqmp:,patch_embed_intg:,super_suite:,test_suite:,reg_type:,reg_subtype:,test_name:,module:,run_rdi_settings:,build_zynq:,build_zynqmp:,build_zynqmp_component:,build_hdf_component:,build_elf_component:,build_elf_with_rdi:,hwflow_path:,git_proxy_command:,qemu_plnx_host:,board_type:,serial_port:,generate_csv:,yocto_build:"
+
+#Valid PetaLinux parameters
+P_BOARD="zcu102,zcu106,ac701,zc706,ep108,kc705,zc702,zcu100,kcu105,zed,zc1751"
+P_VARIANCE="systest,qemu"
+P_PLATFORM_TYPE="mb,zynq,zynqMP"
+P_VERSION="da7,da10,da7-es2,da7-prod,na"
+P_MODULE="na,dc1,dc2"
+P_FLAVOUR="lite,full,na"
+P_COMPONENT="prebuild,build,qemu"
+
+#Valid OSL Build parameters
+O_BUILD_ZYNQMP_COMPONENT="all,common,dc1,dc2,dc5,ep108,zcu100,zcu102,qemu"
+O_YOCTO_BUILD_ZYNQMP_COMPONENT="ep108,zcu100,zcu102"
+O_BUILD_HDF_COMPONENT="all,dc1,dc2,dc5,zcu102,zcu100"
+O_BUILD_ELF_COMPONENT="all,dc1,dc2,dc5,zcu102,zcu100"
+
+#Valid OSL Run parameters
+O_MODULE="dc1,dc2,dc5,kintex7,zcu102,zcu100,zc702,zc702-ecc,zc706,zc706-ecc,zc770-dc1,zc770-dc2-x16,zc770-dc2-x8,zc770-dc3,zc770-dc4,zed"
+
+zynq_modules=(zc702 zc702-ecc zc702-armcc zc702-armcc- zc702-armcc-armcc zc706 zc706-ecc zc770-dc1 zc770-dc2-x16 zc770-dc2-x8 zc770-dc2-x8-armcc kc705 eMMC_board)
+
+
+function ArgumentsCheck {
+
+if [[ ",$1," != *",$2,"* && $2 != "na" ]] ; then
+        echo "Please check argument $2 as per these valid values in $1"
+	exit
+fi
+}
+
+valid_command_help="
+Refer below syntax for sample command:
+
+./regression --component <osl/petalinux/standalone> --execute <build/run> : This will run with default config file
+
+./regression --component <osl/petalinux/standalone> --execute <build/run> --module dc1 --run_id username_20171024 : This will run with command line params and use other config params from default config file
+
+./regression --component <osl/petalinux/standalone> --execute <build/run> --config config1.sh : This will use params mentioned in config1.sh file and other config params from default config file. Also while using --config, it is mandatory to give RUN_ID in config1.sh file.
+"
+
+# The command line help
+help() {
+	echo "Run regressions for petalinux, osl, standalone, zynq.
+Usage:
+    ./regression [options]
+Required:
+    --component <osl/petalinux/standalone>
+    --execute <build/run>
+Options:
+    --help            show help
+    --config <path to user config file>
+    --<valid_parameter> <value>
+
+    Valid osl/standalone parameters:
+
+    ${osl_standalone_args//:}
+
+    Valid petalinux parameters:
+
+    ${petalinux_args//:}
+
+Example:
+    ./regression --component petalinux --execute build --silicon_ver da7-es2 --git_branch_kernel master-next
+
+    ./regression --component petalinux --execute run --config ~/user_config.sh
+"
+    exit 1
+}	
+
+function ParseCmdLineArgs {
+	input_args=$1
+	if [[ "$REPO" == "osl" || "$REPO" == "standalone" ]]; then
+		valid_args=osl_standalone_args
+	else
+		valid_args=${REPO}_args
+	fi
+	
+	args=$(getopt -o "" --long "${!valid_args}" -- "$@" 2>/dev/null)
+	if [[ $? -ne 0 ]]; then
+		echo "Invalid option"
+		help
+		exit
+	fi
+
+	eval set -- "${args}"
+
+	RUN_OPTION=""
+	if [ "${args}" == " --" ]; then
+		RUN_OPTION="defaultConfig"
+	elif [[ "${args}" == *"--config"* ]]; then
+		RUN_OPTION="userConfig"
+	else
+		RUN_OPTION="commandLine"
+	fi
+
+	# check if input params are given using custom config file
+	while true; do
+		if [ "$1" == "*" ] || [ "$1" == "help" ]; then
+			help
+			exit
+		fi
+		if [ "$1" == "--" ]; then
+			break;
+		fi
+		VAR=`echo $1 | awk '{print toupper($0)}' | cut -d'-' -f3`
+		VAR_LOWERCASE=`echo $1 | cut -d'-' -f3`
+
+		# check if comman lin eoption and --config both are given
+		if [[ "$RUN_OPTION" == "userConfig" && "${!valid_args}" == *"$VAR_LOWERCASE"* && "$VAR_LOWERCASE" != "config" ]]; then
+                        echo "ERROR :: Either use config(using --config) or command line arguments. Specifying config file and other command line parameters together is invalid usecase."
+                        echo "$valid_command_help"
+			exit
+		fi
+
+		if [ "$VAR" == "CONFIG" ]; then
+			if [ -e "$2" ]; then
+				RUN_ID_VAR=`grep -r RUN_ID $2 | sed -e 's/RUN_ID=//g'`
+
+				if [ -z "$RUN_ID_VAR" ]; then
+					echo "ERROR :: RUN_ID is not given in config file or it is null. Please give RUN_ID param in $2 file."
+					echo "$valid_command_help"
+					exit
+				fi
+				export INPUT_PARAM_FILE=user_config_${RUN_ID_VAR}.sh
+				rm -f $REPO/$INPUT_PARAM_FILE
+				cp $2 $REPO/$INPUT_PARAM_FILE
+			else
+				echo "ERROR :: config file $2 is not found. Please make sure file exists or path is correct."
+				echo "$valid_command_help"
+				exit
+			fi
+		fi
+		if [ "$VAR" == "RUN_ID" ]; then
+			RUN_ID_VAR=$2
+			export INPUT_PARAM_FILE=user_config_${RUN_ID_VAR}.sh
+                        rm -f $REPO/$INPUT_PARAM_FILE
+		fi
+
+		shift
+		shift
+	done
+
+	# if input params are given using command line
+	# convert each param to upper case and save it in file in key=value format
+	if [ "$RUN_OPTION" == "commandLine" ]; then
+		if [ -z "$RUN_ID_VAR" ]; then
+			echo "ERROR :: While giving command line arguments(and not using --config option) --run_id is required parameter. Please give run_id in command."
+			echo "$valid_command_help"
+			exit
+		fi
+
+		eval set -- "${args}"
+		while true; do
+			if [ "$1" == "*" ] || [ "$1" == "help" ]; then
+				help
+				exit
+			fi
+			if [ "$1" == "--" ]; then
+				break;
+			fi
+			VAR=`echo $1 | awk '{print toupper($0)}' | cut -d'-' -f3`
+			echo "$VAR=\"$2\"" >> $REPO/$INPUT_PARAM_FILE
+			shift
+			shift
+		done
+	fi
+}
+
+build_osl_standalone() {
+
+	ArgumentsCheck $O_BUILD_ZYNQMP_COMPONENT $BUILD_ZYNQMP_COMPONENT
+	ArgumentsCheck $O_BUILD_HDF_COMPONENT $BUILD_HDF_COMPONENT
+	ArgumentsCheck $O_BUILD_ELF_COMPONENT $BUILD_ELF_COMPONENT
+	if [ "$YOCTO_BUILD" == 1 ]; then
+		ArgumentsCheck $O_YOCTO_BUILD_ZYNQMP_COMPONENT $BUILD_ZYNQMP_COMPONENT
+	fi
+		
+	echo "Environment configurations"
+	echo "============================================="
+	echo "COMPONENT : $REPO"
+	echo "BUILD/RUN : $EXECUTE"
+	echo "RUN_RDI_SETTINGS : $RUN_RDI_SETTINGS"
+	echo "YOCTO_BUILD : $YOCTO_BUILD"
+	echo "BUILD_ZYNQ : $BUILD_ZYNQ"
+	echo "BUILD_ZYNQMP : $BUILD_ZYNQMP"
+	echo "BUILD_ZYNQMP_COMPONENT : $BUILD_ZYNQMP_COMPONENT"
+	echo "BUILD_HDF_COMPONENT : $BUILD_HDF_COMPONENT"
+	echo "BUILD_ELF_COMPONENT : $BUILD_ELF_COMPONENT"
+	echo "BUILD_ELF_WITH_RDI : $BUILD_ELF_WITH_RDI"
+	echo "============================================="
+		
+        if [ $RUN_RDI_SETTINGS == "1" ]; then
+               	source osl/rdi-settings.sh
+        fi
+
+        # build procedure
+	if [ "$REPO" == "standalone" ]; then
+	        if [ $BUILD_ZYNQMP == "1" ]; then
+        		./run-scripts/standalone/run-standalone "$EXECUTE"
+	        fi
+	fi
+
+        if [ $BUILD_ZYNQ == "1" ]; then
+		if [ "$REPO" == "osl" ]; then
+	               	./build-scripts/osl/build-zynq
+		elif [ "$REPO" == "standalone" ]; then
+			./build-scripts/standalone/build-zynq
+		fi
+        fi
+        if [ "$BUILD_ZYNQMP_COMPONENT" != "na" ]; then
+               	./build-scripts/osl/build-zynqmp -c $BUILD_ZYNQMP_COMPONENT
+        fi
+        if [ "$BUILD_HDF_COMPONENT" != "na" ]; then
+               	./build-scripts/osl/build-hdf -c $BUILD_HDF_COMPONENT
+        fi
+        if [ "$BUILD_ELF_COMPONENT" != "na" ]; then
+		if [ $BUILD_ELF_WITH_RDI == "1" ]; then
+			./build-scripts/osl/build-elf -c $BUILD_ELF_COMPONENT
+		else
+               		./build-scripts/osl/build-elf-nordi -c $BUILD_ELF_COMPONENT
+		fi
+        fi
+
+}
+
+function check_zynq_module() {
+
+	for val in "${zynq_modules[@]}"; do
+		if [[ "$MODULE" == "$val" ]]; then
+			echo 1
+			return
+		fi
+	done
+	echo 0
+}
+
+if [ "$1" == "--help" ]; then
+	help
+	exit 0
+fi
+
+if [ $# -lt 4 ]; then
+	help
+	exit
+fi
+
+REPO=$2
+EXECUTE=$4
+
+#shift first 4 arguments
+shift 4
+
+[ "$REPO" != "petalinux" ] &&
+[ "$REPO" != "osl" ] && 
+[ "$REPO" != "standalone" ] && echo -e \\n"ERROR :: Argument should be petalinux, osl or standalone"\\n && exit 
+
+
+if [ $REPO = "petalinux" ] ; then
+
+	ParseCmdLineArgs $@
+
+	source petalinux/init-settings.sh
+
+	#export all variables assignments from below two files using set -a command"
+	set -a
+	source common/env_var_global.sh petalinux
+	#set default config
+	source petalinux/config.sh
+
+	#export command line or user config params
+	if [ -f "$REPO/$INPUT_PARAM_FILE" ]; then
+		source $REPO/$INPUT_PARAM_FILE
+	fi
+
+	#using set +a command will not export all further variable assignments
+	set +a
+	source petalinux/settings.sh
+
+	if [ $GENERATE_TQL == "1" ]; then
+		sh petalinux/generate_tql.sh
+	fi
+
+	if [ $GENERATE_CSV == "1" ]; then
+                sh petalinux/generate_csv.sh
+        fi
+
+	if [ $EXECUTE = "build" ] ; then
+
+		ArgumentsCheck $P_BOARD $BOARD
+		ArgumentsCheck $P_VARIANCE $VARIANCE
+
+		echo "Environment configurations"
+		echo "============================================="
+		echo "COMPONENT : $REPO"
+		echo "BUILD/RUN : $EXECUTE"
+		echo "BOARD : $BOARD"
+		echo "PROJECT : $PROJECT"
+		echo "BSP : $BSP"
+		echo "VARIANCE : $VARIANCE"
+		echo "============================================="
+
+		#Build petalinux tests for the given board
+		./build-scripts/petalinux/build-tests
+
+	fi
+	if [ $EXECUTE = "run" ] ; then	
+
+		ArgumentsCheck $P_BOARD $BOARD
+		ArgumentsCheck $P_VARIANCE $VARIANCE
+		ArgumentsCheck $P_PLATFORM_TYPE $PLATFORM_TYPE
+		ArgumentsCheck $P_VERSION $SILICON_VER
+		ArgumentsCheck $P_MODULE $MODULE
+		ArgumentsCheck $P_FLAVOUR $FLAVOUR
+		ArgumentsCheck $P_COMPONENT $COMPONENT
+
+		echo "Environment configurations"
+		echo "============================================="
+		echo "COMPONENT : $REPO"
+		echo "BUILD/RUN : $EXECUTE"
+		echo "BOARD_TYPE : $BOARD_TYPE"
+		echo "BOARD : $BOARD"
+		echo "PROJECT : $PROJECT"
+		echo "BSP : $BSP"
+		echo "VARIANCE : $VARIANCE"
+		echo "PLATFORM_TYPE : $PLATFORM_TYPE"
+		echo "SILICON_VER : $SILICON_VER"
+		echo "MODULE : $MODULE"
+		echo "FLAVOUR : $FLAVOUR"
+		echo "COMPONENT : $COMPONENT"
+		echo "============================================="
+
+		#Run the petlainux test
+		echo "PETALINUX TEST START"
+
+		if [ $BOARD_TYPE = "local_board" ] ; then
+			./run-scripts/petalinux/local-board-run-petalinux
+		else
+			./run-scripts/petalinux/run-petalinux
+		fi
+
+	fi
+fi
+
+if [ $REPO = "osl" ] ; then
+
+	ParseCmdLineArgs $@
+
+       	#osl config
+	source osl/init-settings.sh
+
+	#export all variables assignments from below two files using set -a command"
+	set -a
+	#set default config
+	source common/osl_standalone_config.sh
+
+        #export command line or user config params
+        if [ -f "$REPO/$INPUT_PARAM_FILE" ]; then
+                source $REPO/$INPUT_PARAM_FILE
+        fi
+
+	#using set +a command will not export all further variable assignments
+	set +a	
+
+	source $REPO/settings.sh
+
+	if [ $GENERATE_CSV = "1" ] ; then
+		sh osl/generate_csv.sh
+	fi
+
+	if [ $EXECUTE = "build" ] ; then
+		build_osl_standalone
+	fi
+
+	if [ $EXECUTE = "run" ] ; then
+		ArgumentsCheck $O_MODULE $OSL_MODULE
+
+		echo "Environment configurations"
+                echo "============================================="
+                echo "COMPONENT : $REPO"
+                echo "BUILD/RUN : $EXECUTE"
+                echo "BOARD_TYPE : $BOARD_TYPE"
+                echo "RUN_RDI_SETTINGS : $RUN_RDI_SETTINGS"
+                echo "OSL_MODULE : $OSL_MODULE"
+                echo "============================================="		
+
+		if [ $RUN_RDI_SETTINGS == "1" ]; then
+                        source osl/rdi-settings.sh
+                fi
+
+		# tests execution
+		if [ $BOARD_TYPE = "local_board" ] ; then
+			./run-scripts/osl/local-board-run-osl
+		else
+			./run-scripts/osl/run-osl
+		fi
+	fi
+fi
+
+if [ $REPO = "standalone" ]
+then
+
+        ParseCmdLineArgs $@
+
+        #standalone config
+        source standalone/init-settings.sh
+	source osl/init-settings.sh
+
+        #export all variables assignments from below two files using set -a command"
+	set -a
+        #set default config
+	source common/osl_standalone_config.sh
+
+        #export command line or user config params
+        if [ -f "$REPO/$INPUT_PARAM_FILE" ]; then
+                source $REPO/$INPUT_PARAM_FILE
+        fi
+
+        #using set +a command will not export all further variable assignments
+	set +a
+
+	if [ $EXECUTE = "build" ] ; then
+		source osl/settings.sh
+	fi
+	
+	source $REPO/settings.sh
+
+	if [ $RUN_RDI_SETTINGS == "1" ]; then
+		sh $REPO/rdi-settings.sh
+	fi
+
+	if [ $EXECUTE = "build" ] ; then
+		build_osl_standalone
+	fi
+
+	if [ $EXECUTE = "run" ] ; then
+        	echo "============================================="
+        	echo "COMPONENT : $REPO"
+        	echo "BUILD/RUN : $EXECUTE"
+        	echo "MODULE : $MODULE"
+        	echo "RUN_ID : $RUN_ID"
+		echo "============================================="
+
+		found=$(check_zynq_module)
+		if [ "$found" == 1 ]; then
+			./run-scripts/standalone/run-zynq
+		else	
+			./run-scripts/standalone/run-standalone "$EXECUTE"
+		fi
+	fi
+
+fi
+
